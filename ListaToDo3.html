@@ -1,0 +1,212 @@
+<html>
+
+<body>
+  <div class="contenedor" >
+  <label class="titulo">Lista de Tareas</label>
+    <div class="ingresar" >
+      <input class="input-tarea" type="text" id="texto" placeholder="Ingrese una tarea">
+      <button class="boton-agregar" onclick="agregartarea();" >nuevo</button>
+    </div>
+    <div class="controles">
+      <table id="TableColor">
+        <tbody id="tbody"></tbody>
+      </table>
+    </div>
+  </div>
+</body>
+</html>
+<style>
+  .contenedor {
+    width: 300px;
+    border: 3px solid grey;
+    margin: auto;
+    padding: 10px;
+    display: flex;
+    flex-direction: column;
+    text-align: center;
+  }
+  .boton-borrar {
+    cursor:pointer;
+    font-family: 'Segoe UI', sans-serif;
+    background-color: white;
+    border: 1px;
+    border-style: solid;
+    border-color: gray;
+    border-radius: 5px;
+    color: gray;
+    font-weight: 400;
+    float: right;
+    margin-right: 5px;
+  }
+  .controles {
+  	margin: auto;
+    margin-top: 20px;
+  }
+  .ingresar {
+    display: flex;
+    align-items: center;
+    margin: 20px auto auto auto;
+    height: 30px;
+  }
+  .boton-agregar {
+    background-color: #0196EE;
+    font-family: 'Segoe UI', sans-serif;
+    border-style: none;
+    color: white;
+    margin: auto;
+    height: 100%;
+    width: 80px;
+    font-size: 15px;
+  }
+  .input-tarea {
+    height: 100%;
+  }
+  .titulo {
+    font-size: large;
+    font-family: 'Segoe UI', sans-serif;
+    font-weight: 640;
+    color: grey;
+  }
+  .name-tarea{
+    color: gray;
+    font-size: medium;
+    font-family: 'Segoe UI', sans-serif;
+  }
+
+  .fila{
+    height: 40px;
+  }
+
+  input:checked + label.tachado {
+    text-decoration:line-through;
+  }
+
+  tr:nth-child(odd) {
+    background-color: #EFEFEF;
+  }
+
+  tr:nth-child(even) {
+    background-color: #FFFFFF;
+  }
+
+  #TableColor {
+    height: 120px;
+    width: 280px;
+    margin-bottom: 30px;
+  }
+
+</style>
+
+<script>
+  var request = window.indexedDB.open('tareas', 1);
+  var db;
+  request.onerror = function (event){
+    console.log('Error');
+  };
+  request.onsuccess = function(event){
+    db = request.result;
+    console.log("sucess: "+ db);
+    fetch('http://my-json-server.typicode.com/emiliotapia/taller2/todos')
+      .then(function(response) {
+        return response.json();
+      })
+      .then(function(myJson) {
+        for (var i = 0; i < myJson.length; i++) {
+          var nuevo = {id:  myJson[i].id, texto: myJson[i].texto, terminado:  myJson[i].terminado}
+          var request = db.transaction("tareas", "readwrite")
+          .objectStore("tareas")
+          .add(nuevo);
+        }
+        leer();
+      });
+  };
+  request.onupgradeneeded = function (event) {
+    var db = event.target.result;
+    var objectStore = db.createObjectStore("tareas",{ keyPath : 'id', autoIncrement : true });
+  }
+
+  function leer(){
+    var transaction = db.transaction("tareas", "readonly");
+    var objectStore = transaction.objectStore("tareas");
+    var request = objectStore.openCursor();
+    request.onsuccess = function(event) {
+      var cursor = event.target.result;
+      console.log(cursor)
+      if(cursor) {
+        document.getElementById("tbody").innerHTML+='<tr class="fila"><td><input type="checkbox"  id="check'+ cursor.value.id +'" onclick="estado( '+ cursor.value.id +')"><label class="tachado name-tarea">' +
+        cursor.value.texto + '</label><button class="boton-borrar" onclick="borrar('+ cursor.value.id +')">borrar</button></td></tr>' ;
+        cursor.continue();
+      } else {
+        // no more results
+      }
+    };
+  }
+  function agregartarea(){
+    var data = db.transaction(["tareas"], "readwrite");
+    var object = data.objectStore("tareas",{ keyPath : 'id', autoIncrement : true });
+    var request = object.put({
+      texto : document.querySelector("#texto").value,
+      terminado: "false"
+    });
+    console.log(request)
+    request.onerror = function (e) {
+        alert(request.error.name + '\n\n' + request.error.message);
+    };
+    data.oncomplete = function (e) {
+      document.querySelector('#texto').value = '';
+      alert('Se agregó correctamente');
+      limpiar()
+      leer()
+    };
+
+  }
+
+  function estado(id) {
+    //var a = document.getElementById("check"+id).checked ;
+    const transaction = db.transaction(['tareas'], 'readwrite');
+    const objectStore = transaction.objectStore('tareas');
+
+    if(document.getElementById("check"+id).checked == true){
+      alert("Tarea terminada " + id );
+      objectStore.openCursor().onsuccess = function(event) {
+        const cursor = event.target.result;
+        if (cursor) {
+          if (cursor.value.id === id) {
+            const updateData = cursor.value;
+            updateData.terminado = true;
+            const request = cursor.update(updateData);
+          }
+          cursor.continue();
+        }
+      }
+    } else {
+      alert("Tarea no terminada " + id )
+      objectStore.openCursor().onsuccess = function(event) {
+        const cursor = event.target.result
+        if (cursor) {
+          if (cursor.value.id === id) {
+            const updateData = cursor.value
+            updateData.terminado = false
+            const request = cursor.update(updateData);
+          }
+          cursor.continue();
+        }
+      }
+    }
+  }
+  function limpiar() {
+    var table = document.getElementById("tbody")
+    table.innerHTML = "";
+  }
+  function borrar(id){
+    var request = db.transaction(["tareas"], "readwrite")
+    .objectStore("tareas")
+    .delete(id);
+    request.onsuccess = function(event){
+      console.log(event)
+      alert("Se eliminó con id " + id);
+      limpiar()
+      leer();
+    };
+  }
+</script>

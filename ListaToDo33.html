@@ -1,0 +1,383 @@
+<html>
+
+<body>
+  <div class="contenedor" >
+    <label class="titulo">Lista de Tareas</label>
+    <div class="ingresar" >
+      <input class="input-tarea" type="text" id="texto" placeholder="Ingrese una tarea">
+      <button class="boton-agregar" onclick="agregartarea();" >nuevo</button>
+    </div>
+    <div class="controles">
+      <table id="TableColor">
+        <tbody id="tbody"></tbody>
+      </table>
+    </div>
+  </div>
+  <div>
+    <svg id="grafico"></svg>
+  </div>
+  <script src="http://d3js.org/d3.v3.min.js"></script>
+</body>
+</html>
+<style>
+  /*--Grafico--*/
+  .grafico {
+    border: solid black;
+  }
+  rect {
+    fill: #0196EE;
+  }
+  /**/
+  .contenedor {
+    width: 300px;
+    border: 3px solid grey;
+    /* margin: auto; */
+    padding: 10px;
+    display: flex;
+    flex-direction: column;
+    text-align: center;
+  }
+  .boton-borrar {
+    cursor:pointer;
+    font-family: 'Segoe UI', sans-serif;
+    background-color: white;
+    border: 1px;
+    border-style: solid;
+    border-color: gray;
+    border-radius: 5px;
+    color: gray;
+    font-weight: 400;
+    float: right;
+    margin-right: 5px;
+  }
+  .controles {
+  	margin: auto;
+    margin-top: 20px;
+  }
+  .ingresar {
+    display: flex;
+    align-items: center;
+    margin: 20px auto auto auto;
+    height: 30px;
+  }
+  .boton-agregar {
+    background-color: #0196EE;
+    font-family: 'Segoe UI', sans-serif;
+    border-style: none;
+    color: white;
+    margin: auto;
+    height: 100%;
+    width: 80px;
+    font-size: 15px;
+  }
+  .input-tarea {
+    height: 100%;
+  }
+  .titulo {
+    font-size: large;
+    font-family: 'Segoe UI', sans-serif;
+    font-weight: 640;
+    color: grey;
+  }
+  .name-tarea{
+    color: gray;
+    font-size: medium;
+    font-family: 'Segoe UI', sans-serif;
+  }
+
+  .fila{
+    height: 40px;
+  }
+
+  input:checked + label.tachado {
+    text-decoration:line-through;
+  }
+
+  tr:nth-child(odd) {
+    background-color: #EFEFEF;
+  }
+
+  tr:nth-child(even) {
+    background-color: #FFFFFF;
+  }
+
+  #TableColor {
+    height: 120px;
+    width: 280px;
+    margin-bottom: 30px;
+  }
+  hw{
+  text-decoration: line-through;
+
+}
+
+</style>
+
+<script>
+  let first = true
+  let terminadas = 0;
+  let pendientes = 0;
+  //Base de datos
+  var request = window.indexedDB.open('tareas', 1);
+  var db;
+  request.onerror = function (event){
+    console.log('Error');
+  };
+  request.onsuccess = function(event){
+    db = request.result;
+    console.log("sucess: "+ db);
+    fetch('http://my-json-server.typicode.com/emiliotapia/taller2/todos')
+      .then(function(response) {
+        return response.json();
+      })
+      .then(function(myJson) {
+        for (var i = 0; i < myJson.length; i++) {
+          var nuevo = {id:  myJson[i].id, texto: myJson[i].texto, terminado:  myJson[i].terminado}
+          var request = db.transaction("tareas", "readwrite")
+          .objectStore("tareas")
+          .add(nuevo);
+        }
+        leer();
+      });
+  };
+  request.onupgradeneeded = function (event) {
+    var db = event.target.result;
+    var objectStore = db.createObjectStore("tareas",{ keyPath : 'id', autoIncrement : true });
+  }
+
+  function leer(){
+    var transaction = db.transaction("tareas", "readonly");
+    var objectStore = transaction.objectStore("tareas");
+    var request = objectStore.openCursor();
+    terminadas = 0;
+    pendientes = 0;
+    request.onsuccess = function(event) {
+      var cursor = event.target.result;
+      if(cursor) {
+        if(cursor.value.terminado === true){
+          document.getElementById("tbody").innerHTML+='<tr class="fila"><td><input type="checkbox"  id="check'+ cursor.value.id +'" onclick="estado( '+ cursor.value.id +')"><hw class="tachado name-tarea">' +
+          cursor.value.texto + '</hw><button class="boton-borrar" onclick="borrar('+ cursor.value.id +')">borrar</button></td></tr>' ;
+          terminadas++;
+        } else {
+          document.getElementById("tbody").innerHTML+='<tr class="fila"><td><input type="checkbox"  id="check'+ cursor.value.id +'" onclick="estado( '+ cursor.value.id +')"><label class="tachado name-tarea">' +
+          cursor.value.texto + '</label><button class="boton-borrar" onclick="borrar('+ cursor.value.id +')">borrar</button></td></tr>' ;
+
+          pendientes++;
+        }
+        cursor.continue();
+      } else {
+        generarGrafico()
+      }
+    };
+
+  }
+
+  function generarGrafico() {
+    //Grafico D3
+    console.log(terminadas+"+"+pendientes)
+    var data = [pendientes, terminadas]; //pendientes - terminadas
+    var margen = {
+      top: 30,
+      right: 30,
+      bottom: 40,
+      left: 50
+    }
+    var width = 400 - margen.right - margen.left;
+    var height = 400 - margen.top - margen.bottom;
+    var duracion = 300;
+    var delay = 30;
+
+    var yScale = d3.scale.linear()
+      .domain([0, d3.max(data)])
+      .range([0, height]);
+
+    var xScale = d3.scale.ordinal()
+      .domain(d3.range(0, 2))
+      .rangeBands([40, width])
+
+
+    if(!first){
+      svg.remove()
+      this.first = false
+    }
+    var myChart = d3.select("svg")
+      .attr('width', width + margen.right + margen.left)
+      .attr('height', height + margen.top + margen.bottom)
+      .append('g')
+      .attr('transform', 'translate('+margen.left+','+margen.top+')')
+      .selectAll("rect")
+      .data(data)
+      .enter().append("rect")
+        //.attr("width", xScale.rangeBand()) //ancho de la barra
+        .attr("width", 100)
+        .attr("x", function(d,i) {
+          //return 80
+          return xScale(i)
+        })
+        .attr("y", height)
+        .attr("height", 0); //alto de la barra
+
+    myChart.transition()
+        .attr('height', function(d) {
+          return yScale(d);
+        })
+        .attr('y', function(d){
+          return height - yScale(d)
+        })
+        .duration(duracion)
+        .delay(function(d, i) {
+          return i * delay
+        })
+
+    var verticalScale = d3.scale.linear()
+      .domain([0, d3.max(data)])
+      .range([height, 0]);
+
+    var horizontalScale = d3.scale.ordinal()
+      .domain(data.map(function(d,i){
+        if(i === 0){
+          return 'pendientes'
+        }
+        return 'terminadas'
+      }))
+      .rangeBands([0, width])
+
+    //Ejes
+    var vAxis = d3.svg.axis()
+        .scale(verticalScale)
+        .orient('left')
+        .ticks(5)
+        .tickPadding(5)
+
+    var hAxis = d3.svg.axis()
+        .scale(horizontalScale)
+        .orient('bottom')
+        .tickValues(horizontalScale.domain().filter(function(d,i){
+          return width/2
+        }));
+
+    var vGuide = d3.select('svg')
+        .append('g')
+          //vAxis(vGuide)
+          .call(vAxis)
+          vGuide.attr('transform', 'translate('+margen.left+','+margen.top+')')
+          vGuide.selectAll('path')
+            .style('fill', 'none')
+            .style('stroke', '#000')
+          vGuide.selectAll('line')
+            .style('stroke', '#000')
+
+
+    var hGuide = d3.select('svg')
+        .append('g')
+          //hAxis(hGuide)
+          .call(hAxis)
+          hGuide.attr('transform', 'translate('+margen.left+','+(height+margen.top)+')')
+          hGuide.selectAll('path')
+            .style('fill', 'none')
+            .style('stroke', '#000')
+          hGuide.selectAll('line')
+            .style('stroke', '#000')
+
+
+  }
+
+  function agregartarea(){
+    var data = db.transaction(["tareas"], "readwrite");
+    var object = data.objectStore("tareas",{ keyPath : 'id', autoIncrement : true });
+    var request = object.put({
+      texto : document.querySelector("#texto").value,
+      terminado: false
+    });
+    request.onerror = function (e) {
+        alert(request.error.name + '\n\n' + request.error.message);
+    };
+    data.oncomplete = function (e) {
+      document.querySelector('#texto').value = '';
+      alert('Se agregó correctamente');
+      limpiar();
+      actualizar();
+      leer();
+    };
+  }
+
+  function estado(id) {
+    //var a = document.getElementById("check"+id).checked ;
+    const transaction = db.transaction(['tareas'], 'readwrite');
+    const objectStore = transaction.objectStore('tareas');
+
+    if(document.getElementById("check"+id).checked == true){
+      alert("Tarea terminada " + id );
+      objectStore.openCursor().onsuccess = function(event) {
+        const cursor = event.target.result;
+        if (cursor) {
+          if (cursor.value.id === id) {
+            const updateData = cursor.value;
+            updateData.terminado = true;
+            const request = cursor.update(updateData);
+            limpiar();
+            actualizar();
+
+          }
+          if(cursor.value.terminado === true){
+            terminadas++;
+
+          } else {
+            pendientes++;
+          }
+          cursor.continue();
+        } else {
+          //generarGrafico()
+          leer();
+          limpiar();
+          actualizar();
+        }
+      }
+    } else {
+      alert("Tarea no terminada " + id )
+      objectStore.openCursor().onsuccess = function(event) {
+        const cursor = event.target.result
+        if (cursor) {
+          if (cursor.value.id === id) {
+            const updateData = cursor.value
+            updateData.terminado = false
+            const request = cursor.update(updateData);
+            actualizar();
+          }
+          if(cursor.value.terminado === true){
+            terminadas++;
+          } else {
+            pendientes++;
+          }
+          cursor.continue();
+        } else {
+          //generarGrafico()
+
+          leer();
+        }
+      }
+    }
+  }
+
+  function limpiar() {
+    var table = document.getElementById("tbody")
+    table.innerHTML = "";
+  }
+
+  function actualizar() {
+    var svg= document.getElementById("grafico")
+    svg.innerHTML = "";
+  }
+
+  function borrar(id){
+    var request = db.transaction(["tareas"], "readwrite")
+    .objectStore("tareas")
+    .delete(id);
+    request.onsuccess = function(event){
+      alert("Se eliminó con id " + id);
+      limpiar()
+      actualizar();
+      leer();
+    };
+  }
+</script>
